@@ -1,0 +1,38 @@
+# Fork-only: build fury-server as a static musl binary and keep it as an
+# artifact. No tag, no Release, no image push.
+name: fork build fury-server
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  binary:
+    strategy:
+      matrix:
+        include:
+          - arch: x86_64
+            runner: ubuntu-24.04
+          - arch: aarch64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: musl toolchain
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq musl-tools
+          rustup target add ${{ matrix.arch }}-unknown-linux-musl
+      - name: build
+        env:
+          CC_x86_64_unknown_linux_musl: musl-gcc
+          CC_aarch64_unknown_linux_musl: musl-gcc
+        run: cargo build --release --locked -p fury-server --target ${{ matrix.arch }}-unknown-linux-musl
+      - name: check
+        run: |
+          BIN=target/${{ matrix.arch }}-unknown-linux-musl/release/fury-server
+          file "$BIN" | grep -qE "statically linked|static-pie linked"
+          "$BIN" --version
+      - uses: actions/upload-artifact@v4
+        with:
+          name: fury-server-linux-${{ matrix.arch }}
+          path: target/${{ matrix.arch }}-unknown-linux-musl/release/fury-server
